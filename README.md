@@ -15,12 +15,12 @@
 
 - **Core:** Node.js
 - **Framework:** Express.js
-- **Database:** MongoDB with Mongoose ODM
-- **Authentication:** JWT (JSON Web Tokens) & Bcrypt
+- **Database:** MongoDB with Mongoose
+- **Authentication:** JWT & Bcrypt
 - **File Storage:** Cloudinary
 - **Sendler email:** Brevo
 - **Validation:** Joi
-- **Documentation:** Documentation: Swagger UI
+- **Documentation:** Swagger UI
 - **Other:** Docker
 
 ## Getting Started
@@ -29,7 +29,6 @@
 
 ```bash
    git clone https://github.com/Dmytro1117/denmark-api_node.js.git
-   cd denmark-api-node-js
 ```
 
 ### 2. **Install dependencies:**
