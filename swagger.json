@@ -1,121 +1,139 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "title": "Phonebook API docs",
-    "description": "The API for the Phonebook",
+    "title": "Denmark API",
+    "description": "The API for the Denmark",
     "version": "1.0.0"
   },
   "servers": [
     {
-      "url": "https://phonebook-api-backend-v92w.onrender.com/api"
+      "url": "https://denmark-api-node-js.onrender.com/api"
     }
   ],
   "paths": {
     "/auth/register": {
       "post": {
-        "summary": "Registration new user",
-        "tags": [
-          "Authorization"
-        ],
-        "operationId": "RegistrationNewUser",
+        "tags": ["Auth"],
+        "summary": "User registration with avatar upload",
+        "description": "Registers a new user, handles avatar upload via Cloudinary, and sends a verification email. All data except the avatar must be provided as multipart form fields.",
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/Registration"
+                "type": "object",
+                "required": ["name", "email", "password", "avatar"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "minLength": 2,
+                    "description": "User's full name",
+                    "example": "John Connor"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "description": "Unique email address used for login and verification",
+                    "example": "johnconnor@i.ua"
+                  },
+                  "password": {
+                    "type": "string",
+                    "minLength": 6,
+                    "maxLength": 30,
+                    "format": "password",
+                    "description": "Secure password (hashed on the server)",
+                    "example": "1234567890"
+                  },
+                  "avatar": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Profile picture. Allowed formats: jpg, jpeg, png, gif. Max size: 5MB."
+                  }
+                }
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Created",
+            "description": "Registration successful. Verification email sent.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RegistrationCurrentResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequest"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string",
-                      "example": "Sorry, user with email in use"
-                    }
+                  "$ref": "#/components/schemas/AuthSuccessResponse"
+                },
+                "example": {
+                  "status": "success",
+                  "code": 201,
+                  "message": "Registration successful! Please verify your email.",
+                  "user": {
+                    "name": "John Connor",
+                    "email": "johnconnor@i.ua",
+                    "avatar": "https://cloudinary.com"
                   }
                 }
               }
             }
-          }
+          },
+          "400": { "$ref": "#/components/responses/ValidationError" },
+          "409": { "$ref": "#/components/responses/ConflictError" },
+          "500": { "$ref": "#/components/responses/ServerError" }
         }
       }
     },
     "/auth/verify/{verificationToken}": {
       "get": {
-        "summary": "Verification User's email",
-        "tags": [
-          "Authorization"
-        ],
-        "operationId": "VerificationEmail",
+        "tags": ["Auth"],
+        "summary": "Verify email via token",
+        "description": "This endpoint confirms the user's email address using a unique token sent via email. After successful verification, the user can log in.",
         "parameters": [
           {
             "name": "verificationToken",
             "in": "path",
             "required": true,
-            "description": "verification token",
+            "description": "The unique hex token from the verification link",
             "schema": {
-              "type": "string"
-            },
-            "example": "qJRyTbHAdKVlldd4LTh6t"
+              "type": "string",
+              "example": "a1b2c3d4e5f6g7h8i9j0"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Succes",
+            "description": "Email successfully verified or already verified",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string",
-                      "example": "Verification successful"
+                "schema": { "$ref": "#/components/schemas/StatusResponse" },
+                "examples": {
+                  "NewVerify": {
+                    "summary": "First time verification",
+                    "value": {
+                      "status": "success",
+                      "code": 200,
+                      "message": "Verification successful"
+                    }
+                  },
+                  "AlreadyVerified": {
+                    "summary": "Email was already verified",
+                    "value": {
+                      "status": "success",
+                      "code": 200,
+                      "message": "Email already verified"
                     }
                   }
                 }
               }
             }
           },
-          "404": {
-            "description": "Not Found",
+          "410": {
+            "description": "Token expired or invalid",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string",
-                      "example": "Verification user not found"
-                    }
-                  }
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 410,
+                  "message": "Verification token is invalid or expired"
                 }
               }
             }
@@ -125,21 +143,21 @@
     },
     "/auth/verify/resend-email": {
       "post": {
-        "summary": "Resend verification token",
-        "tags": [
-          "Authorization"
-        ],
-        "operationId": "ResendVerification",
+        "tags": ["Auth"],
+        "summary": "Resend verification email",
+        "description": "If a user didn't receive the initial verification email, this endpoint generates a new token and sends another email. Only works for unverified accounts.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": ["email"],
                 "properties": {
                   "email": {
                     "type": "string",
-                    "example": "email@sci.net"
+                    "format": "email",
+                    "example": "johnconnor@i.ua"
                   }
                 }
               }
@@ -148,49 +166,40 @@
         },
         "responses": {
           "200": {
-            "description": "Succes",
+            "description": "Verification email sent successfully",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string",
-                      "example": "Verify email send success"
-                    }
-                  }
+                "schema": { "$ref": "#/components/schemas/StatusResponse" },
+                "example": {
+                  "status": "success",
+                  "code": 200,
+                  "message": "Verify resend email send success"
                 }
               }
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Email already verified",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string",
-                      "example": "Verification has already been passed"
-                    }
-                  }
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "Verification has already been passed"
                 }
               }
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "User not found",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string",
-                      "example": "Email not found"
-                    }
-                  }
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 404,
+                  "message": "Email not found"
                 }
               }
             }
@@ -200,77 +209,64 @@
     },
     "/auth/login": {
       "post": {
-        "summary": "Login User",
-        "tags": [
-          "Authorization"
-        ],
-        "operationId": "LoginUser",
+        "tags": ["Auth"],
+        "summary": "User login",
+        "description": "Authenticates the user and returns a JWT token. Only verified users can log in.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Login"
+                "type": "object",
+                "required": ["email", "password"],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "johnconnor@i.ua"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "minLength": 6,
+                    "example": "654321"
+                  }
+                }
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Succes",
+            "description": "Login successful",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "token": {
-                      "type": "string",
-                      "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY1MWRiNzkwZTJyNjYzYjYxNThiZjdhNyIsImlhdCI6MTY5Njk1MjY5MSwiZXhwIjoxNjj2OTcwNjkxfQ.W7LsndQygCykOh_noKNhcQCMQiXds6HP3pYzIur3k6A"
-                    },
-                    "user": {
-                      "$ref": "#/components/schemas/RegistrationCurrentResponse"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequest"
+                  "$ref": "#/components/schemas/LoginSuccessResponse"
                 }
               }
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Unauthorized - Invalid credentials or unverified email",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string",
-                      "example": "Email not verified"
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "examples": {
+                  "InvalidCredentials": {
+                    "summary": "Wrong email or password",
+                    "value": {
+                      "status": "Error",
+                      "code": 401,
+                      "message": "Email or password invalid"
                     }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string",
-                      "example": "Sorry, password or email is wrong"
+                  },
+                  "NotVerified": {
+                    "summary": "Email not verified yet",
+                    "value": {
+                      "status": "Error",
+                      "code": 401,
+                      "message": "Email not verified"
                     }
                   }
                 }
@@ -282,91 +278,69 @@
     },
     "/auth/current": {
       "get": {
-        "summary": "Get user's info",
-        "tags": [
-          "Authorization"
+        "tags": ["Auth"],
+        "summary": "Get current user info",
+        "description": "Returns information about the user associated with the provided JWT token. Requires a valid Authorization header.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
         ],
-        "operationId": "getUserInfo",
         "responses": {
           "200": {
-            "description": "Succes",
+            "description": "User data retrieved successfully",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RegistrationCurrentResponse"
-                }
+                "schema": { "$ref": "#/components/schemas/UserResponse" }
               }
             }
           },
           "401": {
-            "description": "Unauthorized",
+            "description": "Unauthorized - Missing or invalid token",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Unauthorized"
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "examples": {
+                  "NoHeader": {
+                    "summary": "Missing Authorization header",
+                    "value": {
+                      "status": "Error",
+                      "code": 401,
+                      "message": "Authorization header not found"
+                    }
+                  },
+                  "InvalidToken": {
+                    "summary": "Invalid or expired token",
+                    "value": {
+                      "status": "Error",
+                      "code": 401,
+                      "message": "Not authorized: jwt expired"
+                    }
+                  }
                 }
               }
             }
           }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
+        }
       }
     },
-    "/auth/logout": {
+    "/auth/password/forgot": {
       "post": {
-        "summary": "Logout a user",
-        "tags": [
-          "Authorization"
-        ],
-        "operationId": "logoutUser",
-        "responses": {
-          "204": {
-            "description": "No Content"
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Unauthorized"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      }
-    },
-    "/user/subscription": {
-      "patch": {
-        "summary": "Patch subscription user",
-        "tags": [
-          "User"
-        ],
-        "operationId": "patchSubscription",
+        "tags": ["Auth"],
+        "summary": "Request password reset",
+        "description": "Sends an email with a reset link containing a temporary token. For security reasons, the server always returns a success message even if the email is not registered.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": ["email"],
                 "properties": {
-                  "subscription": {
+                  "email": {
                     "type": "string",
-                    "enum": [
-                      "starter",
-                      "pro",
-                      "business"
-                    ],
-                    "example": "pro"
+                    "format": "email",
+                    "example": "johnconnor@i.ua"
                   }
                 }
               }
@@ -375,67 +349,177 @@
         },
         "responses": {
           "200": {
-            "description": "Succes",
+            "description": "Success - Request processed",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string",
-                      "example": "Subscription change on business success"
-                    }
-                  }
+                "schema": { "$ref": "#/components/schemas/StatusResponse" },
+                "example": {
+                  "status": "success",
+                  "code": 200,
+                  "message": "If the email exists, a reset link has been sent."
                 }
               }
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Bad Request - Invalid email format",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequest"
-                }
+                "schema": { "$ref": "#/components/schemas/ErrorModel" }
               }
             }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Unauthorized"
+          }
+        }
+      }
+    },
+    "/auth/password/reset/{resetToken}": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Reset password using token",
+        "description": "Sets a new password for the user. Requires a valid reset token from the email. Successful reset will invalidate all current active sessions (log out the user from all devices).",
+        "parameters": [
+          {
+            "name": "resetToken",
+            "in": "path",
+            "required": true,
+            "description": "The temporary token sent via email",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["password", "passwordConfirm"],
+                "properties": {
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "minLength": 6,
+                    "maxLength": 30,
+                    "example": "new654321"
+                  },
+                  "passwordConfirm": {
+                    "type": "string",
+                    "format": "password",
+                    "description": "Must match the password field",
+                    "example": "new654321"
+                  }
                 }
               }
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Password updated successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StatusResponse" },
+                "example": {
+                  "status": "success",
+                  "code": 200,
+                  "message": "Password has been reset successfully"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid token or passwords don't match",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "examples": {
+                  "TokenError": {
+                    "summary": "Invalid or expired token",
+                    "value": {
+                      "status": "Error",
+                      "code": 400,
+                      "message": "Reset token is invalid or expired"
+                    }
+                  },
+                  "MatchError": {
+                    "summary": "Passwords do not match",
+                    "value": {
+                      "status": "Error",
+                      "code": 400,
+                      "message": "Validation error",
+                      "fields": { "passwordConfirm": "Passwords do not match" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Logout user",
+        "description": "Invalidates the current session by removing the JWT token from the user record in the database. Requires a valid Authorization header.",
         "security": [
           {
             "bearerAuth": []
           }
-        ]
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully logged out",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StatusResponse" },
+                "example": {
+                  "status": "success",
+                  "code": 200,
+                  "message": "Logout success"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 401,
+                  "message": "Not authorized"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/user/avatars": {
       "patch": {
-        "summary": "Uploads an image user",
-        "tags": [
-          "User"
+        "tags": ["User"],
+        "summary": "Update user profile picture",
+        "description": "Uploads a new avatar image. The file is processed (resized to 350x350, fill crop) and uploaded to Cloudinary, overwriting the previous one. Supported formats: jpg, jpeg, png, gif.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
         ],
-        "operationId": "uploadImage",
         "requestBody": {
           "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "type": "object",
+                "required": ["avatar"],
                 "properties": {
                   "avatar": {
                     "type": "string",
                     "format": "binary",
-                    "description": "The avatar image file to upload."
+                    "description": "Image file to upload. Max size: 5MB."
                   }
                 }
               }
@@ -444,15 +528,18 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "Avatar successfully updated",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "status": { "type": "string", "example": "success" },
+                    "code": { "type": "integer", "example": 200 },
                     "avatar": {
                       "type": "string",
-                      "example": "www.avatar.com/76ceae3375ff085a80d80e31e960da34"
+                      "description": "New Cloudinary URL of the avatar",
+                      "example": "https://cloudinary.com"
                     }
                   }
                 }
@@ -460,473 +547,469 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Bad Request - Missing file or invalid format",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequest"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      }
-    },
-    "/contacts": {
-      "get": {
-        "summary": "Get all contacts",
-        "tags": [
-          "Сontacts"
-        ],
-        "operationId": "getAllContacts",
-        "parameters": [
-          {
-            "name": "page",
-            "in": "query",
-            "description": "Page number",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 1
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "description": "Number of items per page",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 20
-            }
-          },
-          {
-            "name": "favorite",
-            "in": "query",
-            "description": "Filter and sort contacts by favorite status.",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "example": true
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "contacts": {
-                      "$ref": "#/components/schemas/Contacts"
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "examples": {
+                  "NoFile": {
+                    "summary": "File not provided",
+                    "value": {
+                      "status": "Error",
+                      "code": 400,
+                      "message": "Please, input file",
+                      "fields": null
+                    }
+                  },
+                  "InvalidFormat": {
+                    "summary": "Unsupported file format",
+                    "value": {
+                      "status": "Error",
+                      "code": 400,
+                      "message": "Validation error",
+                      "fields": {
+                        "avatar": "Unsupported image format (use jpg,jpeg, png or gif)"
+                      }
+                    }
+                  },
+                  "FileTooLarge": {
+                    "summary": "File exceeds 5MB limit",
+                    "value": {
+                      "status": "Error",
+                      "code": 400,
+                      "message": "Validation error",
+                      "fields": { "avatar": "File too large (max 5MB)" }
                     }
                   }
                 }
               }
             }
           },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Unauthorized"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServerError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      },
-      "post": {
-        "summary": "Add new contact",
-        "tags": [
-          "Сontacts"
-        ],
-        "operationId": "postNewContact",
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/user/changePassword": {
+      "patch": {
+        "tags": ["User"],
+        "summary": "Change user password",
+        "description": "Allows an authenticated user to change their password. Checks if the old password is correct and ensures the new password is different from the old one. Invalidates the current session (token) upon success.",
+        "security": [{ "bearerAuth": [] }],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/Contact"
+                "type": "object",
+                "required": [
+                  "oldPassword",
+                  "newPassword",
+                  "newPasswordConfirm"
+                ],
+                "properties": {
+                  "oldPassword": {
+                    "type": "string",
+                    "minLength": 6,
+                    "example": "oldPass123456"
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "minLength": 6,
+                    "maxLength": 30,
+                    "example": "newPass654321"
+                  },
+                  "newPasswordConfirm": {
+                    "type": "string",
+                    "example": "newPass654321"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password changed successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StatusResponse" },
+                "example": {
+                  "status": "success",
+                  "code": 200,
+                  "message": "Password changed successfully. Please login again."
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation or logic error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "examples": {
+                  "WrongOldPassword": {
+                    "summary": "Old password is wrong",
+                    "value": {
+                      "status": "Error",
+                      "code": 400,
+                      "message": "Old password is wrong"
+                    }
+                  },
+                  "SameAsOld": {
+                    "summary": "New password is same as old",
+                    "value": {
+                      "status": "Error",
+                      "code": 400,
+                      "message": "New password must be different"
+                    }
+                  },
+                  "JoiValidationError": {
+                    "summary": "Passwords do not match (Joi)",
+                    "value": {
+                      "status": "Error",
+                      "code": 400,
+                      "message": "Validation error",
+                      "fields": {
+                        "newPasswordConfirm": "New Password do not match"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/user/deleteAccount": {
+      "delete": {
+        "tags": ["User"],
+        "summary": "Delete user account and all associated data",
+        "description": "This is a destructive operation. It performs a full cleanup: \n1. Deletes the user profile and avatar from Cloudinary.\n2. Deletes all user photos from the Gallery and Cloudinary storage.\n3. Removes all user-related records from Documents, Maps, and StudyProgress collections.\n4. Deletes the User record from the database.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account and all data successfully deleted",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StatusResponse" },
+                "example": {
+                  "status": "success",
+                  "code": 200,
+                  "message": "Account deleted successfully"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedError"
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 404,
+                  "message": "User not found"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server Error during cleanup process",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 500,
+                  "message": "Server error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/documents": {
+      "get": {
+        "tags": ["Documents"],
+        "summary": "Get documents list (personal or templates)",
+        "description": "Returns a list of documents. \n- If the user is **authorized**: returns their personal documents. \n- If **unauthorized**: returns global document templates (isTemplate: true). \nIncludes filtering by country and completion status.",
+        "security": [{ "bearerAuth": [] }, {}],
+        "parameters": [
+          {
+            "name": "country",
+            "in": "query",
+            "description": "Filter documents by country code",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["ua", "dk"],
+              "example": "ua"
+            }
+          },
+          {
+            "name": "done",
+            "in": "query",
+            "description": "Filter by status: 'true', 'false'",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["true", "false"],
+              "example": "false"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of documents",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentsListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid query parameters",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "Invalid country parameter: ..."
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Documents"],
+        "summary": "Create a new personal document",
+        "description": "Adds a new document to the user's collection. Validation is performed via Joi. The system prevents creating duplicate documents with the same name for the same owner.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentCreate"
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Created",
+            "description": "Document created successfully",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "addedContact": {
-                      "$ref": "#/components/schemas/Contact"
-                    }
-                  }
+                  "$ref": "#/components/schemas/DocumentResponse"
                 }
               }
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Validation error",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequest"
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "Validation Error",
+                  "fields": {
+                    "text": "Document name must be at least 3 character long"
+                  }
                 }
               }
             }
           },
-          "401": {
-            "description": "Unauthorized",
+          "409": {
+            "description": "Conflict - Document name already exists",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Unauthorized"
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 409,
+                  "message": "Registration conflict",
+                  "fields": { "text": "Duplicate name detected" }
                 }
               }
             }
           },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServerError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
       }
     },
-    "/contacts/{contact_Id}": {
-      "get": {
-        "summary": "Get contact by Id",
-        "tags": [
-          "Сontacts"
-        ],
-        "operationId": "getContactById",
-        "parameters": [
-          {
-            "name": "contact_Id",
-            "in": "path",
-            "required": true,
-            "description": "id contact",
-            "schema": {
-              "type": "string"
-            },
-            "example": "651db689e2e663b6128bf7b3"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "contact": {
-                      "$ref": "#/components/schemas/Contact"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string",
-                      "example": "Sorry, is not valid id."
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Unauthorized"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not Found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFound"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServerError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      },
+    "/documents/{documentId}": {
       "put": {
-        "summary": "Update contact by Id",
-        "tags": [
-          "Сontacts"
-        ],
-        "operationId": "putContactById",
+        "tags": ["Documents"],
+        "summary": "Update an existing document",
+        "description": "Updates all fields of a document. If the provided data is identical to the current data in the database, the server will return a 400 error.",
+        "security": [{ "bearerAuth": [] }],
         "parameters": [
           {
-            "name": "contact_Id",
+            "name": "documentId",
             "in": "path",
             "required": true,
-            "description": "id contact",
-            "schema": {
-              "type": "string"
-            },
-            "example": "651db689e2e663b6128bf7b3"
+            "description": "The unique ID of the document",
+            "schema": { "type": "string" }
           }
         ],
         "requestBody": {
-          "required": false,
+          "required": true,
           "content": {
             "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string",
-                    "example": "Bob Jonson"
-                  },
-                  "phone": {
-                    "type": "string",
-                    "example": "(666) 555-6666"
-                  },
-                  "favorite": {
-                    "type": "boolean",
-                    "example": false
-                  },
-                  "avatar": {
-                    "type": "string",
-                    "example": "www.gravatar.coceae3375ff085a80d80e31e960da34",
-                    "format": "binary",
-                    "description": "The avatar image file to upload."
-                  }
-                }
-              }
+              "schema": { "$ref": "#/components/schemas/DocumentUpdate" }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "Document updated successfully",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "updateContact": {
-                      "$ref": "#/components/schemas/Contact"
-                    }
-                  }
-                }
+                "schema": { "$ref": "#/components/schemas/DocumentResponse" }
               }
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Bad Request - Validation error or No changes detected",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequest"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Unauthorized"
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "examples": {
+                  "NoChanges": {
+                    "summary": "Data is identical",
+                    "value": {
+                      "status": "error",
+                      "code": 400,
+                      "message": "No changes detected to save"
+                    }
+                  },
+                  "ValidationError": {
+                    "summary": "Joi validation failed",
+                    "value": {
+                      "status": "Error",
+                      "code": 400,
+                      "message": "Validation Error",
+                      "fields": { "text": "Document name is too short" }
+                    }
+                  }
                 }
               }
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "Document not found",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFound"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServerError"
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 404,
+                  "message": "Document cannot be updated because it was not found"
                 }
               }
             }
           }
-        },
+        }
+      },
+      "delete": {
+        "tags": ["Documents"],
+        "summary": "Delete a document",
+        "description": "Permanently removes a document from the user's collection. Returns the deleted document object on success.",
         "security": [
           {
             "bearerAuth": []
           }
-        ]
-      },
-      "delete": {
-        "summary": "Delete contact by Id",
-        "tags": [
-          "Сontacts"
         ],
-        "operationId": "deleteContactById",
         "parameters": [
           {
-            "name": "contact_Id",
+            "name": "documentId",
             "in": "path",
             "required": true,
-            "description": "id contact",
+            "description": "The unique ID of the document to delete",
             "schema": {
-              "type": "string"
-            },
-            "example": "651db689e2e663b6128bf7b3"
+              "type": "string",
+              "example": "651a2b3c4d5e6f1234567890"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Succes",
+            "description": "Document deleted successfully",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "status": { "type": "string", "example": "success" },
+                    "code": { "type": "integer", "example": 200 },
                     "message": {
                       "type": "string",
-                      "example": "Delete success."
+                      "example": "Delete success"
                     },
-                    "deletedContact": {
-                      "$ref": "#/components/schemas/Contact"
-                    }
+                    "document": { "$ref": "#/components/schemas/Document" }
                   }
                 }
               }
             }
           },
-          "400": {
-            "description": "BadRequest",
+          "404": {
+            "description": "Not Found - Document does not exist or wrong owner",
             "content": {
               "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string",
-                      "example": "Sorry, is not valid id."
-                    }
-                  }
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 404,
+                  "message": "Document does not exist"
                 }
               }
             }
           },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Unauthorized"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServerError"
-                }
-              }
-            }
-          }
-        },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/documents/{documentId}/done": {
+      "patch": {
+        "tags": ["Documents"],
+        "summary": "Toggle document completion status",
+        "description": "Updates only the 'done' status of a specific document. Requires authentication and a valid document ID.",
         "security": [
           {
             "bearerAuth": []
           }
-        ]
-      }
-    },
-    "/contacts/{contact_Id}/favorite": {
-      "patch": {
-        "summary": "Patch favorite by Id",
-        "tags": [
-          "Сontacts"
         ],
-        "operationId": "patchContactById",
         "parameters": [
           {
-            "name": "contact_Id",
+            "name": "documentId",
             "in": "path",
             "required": true,
-            "description": "id contact",
+            "description": "The unique ID of the document to update",
             "schema": {
-              "type": "string"
-            },
-            "example": "651db689e2e663b6128bf7b3"
+              "type": "string",
+              "example": "651a2b3c4d5e6f1234567890"
+            }
           }
         ],
         "requestBody": {
@@ -935,9 +1018,11 @@
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": ["done"],
                 "properties": {
-                  "favorite": {
-                    "type": "string",
+                  "done": {
+                    "type": "boolean",
+                    "description": "The new status of the document",
                     "example": true
                   }
                 }
@@ -947,14 +1032,142 @@
         },
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "Status updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Missing 'done' field",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "Field 'done' is required"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found - Unable to find or update document",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 404,
+                  "message": "Unable to update the field"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/gallery": {
+      "get": {
+        "tags": ["Gallery"],
+        "summary": "Get gallery photos (personal or templates)",
+        "description": "Returns a paginated list of photos. \n- **Authorized**: returns user's personal gallery photos. \n- **Unauthorized**: returns global gallery templates (isTemplate: true).",
+        "security": [{ "bearerAuth": [] }, {}],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "Page number for pagination",
+            "required": false,
+            "schema": { "type": "integer", "default": 1, "example": 1 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Number of photos per page",
+            "required": false,
+            "schema": { "type": "integer", "default": 9, "example": 9 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Gallery list retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/GalleryListResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Page or limit are not numbers",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "Page and limit must be numbers"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Gallery"],
+        "summary": "Upload photos to gallery",
+        "description": "Allows an authenticated user to upload up to 10 photos at once. A description must be provided, which will be applied to all uploaded photos in the batch.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["galleryPhotos", "description"],
+                "properties": {
+                  "description": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 100,
+                    "description": "Short description for the photos",
+                    "example": "My vacation photos"
+                  },
+                  "galleryPhotos": {
+                    "type": "array",
+                    "maxItems": 10,
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    },
+                    "description": "Array of image files (jpg, jpeg, png, gif). Maximum 10 files."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Photos uploaded successfully",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "updatedFavorite": {
-                      "$ref": "#/components/schemas/Contact"
+                    "status": { "type": "string", "example": "success" },
+                    "code": { "type": "integer", "example": 201 },
+                    "images": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/GalleryPhoto" }
                     }
                   }
                 }
@@ -962,204 +1175,1343 @@
             }
           },
           "400": {
-            "description": "Bad Request",
+            "description": "Validation error (Joi or Multer)",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequest"
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "Validation error",
+                  "fields": {
+                    "galleryPhotos": "Please, select at least one photo"
+                  }
                 }
               }
             }
           },
-          "401": {
-            "description": "Unauthorized",
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/gallery/{photoGalleryId}": {
+      "delete": {
+        "tags": ["Gallery"],
+        "summary": "Delete a photo from gallery",
+        "description": "Permanently removes a photo from the database and Cloudinary storage. A user can only delete photos they own.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "photoGalleryId",
+            "in": "path",
+            "required": true,
+            "description": "The unique ID of the gallery photo record",
+            "schema": {
+              "type": "string",
+              "example": "651a2b3c4d5e6f123456789a"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Photo deleted successfully",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Unauthorized"
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "success" },
+                    "code": { "type": "integer", "example": 200 },
+                    "message": { "type": "string", "example": "Photo deleted" },
+                    "id": {
+                      "type": "string",
+                      "example": "651a2b3c4d5e6f123456789a"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden - You do not own this photo",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 403,
+                  "message": "You don't have permission to delete this photo"
                 }
               }
             }
           },
           "404": {
-            "description": "Not Found",
+            "description": "Not Found - Photo already deleted or doesn't exist",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotFound"
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 404,
+                  "message": "Photo not found or already deleted"
                 }
               }
             }
           },
-          "500": {
-            "description": "Error",
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/study/topics": {
+      "get": {
+        "tags": ["Study"],
+        "summary": "Get study progress and available topics",
+        "description": "Calculates statistics for a specific language level: total learned words, words marked for repeat, and a list of topics with word counts.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "level",
+            "in": "query",
+            "required": true,
+            "description": "Language level to filter topics",
+            "schema": {
+              "type": "string",
+              "enum": ["A1", "A2", "B1", "B2"],
+              "example": "A1"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success - Topics and statistics retrieved",
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ServerError"
+                "schema": { "$ref": "#/components/schemas/StudyTopicsResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid level parameter",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "Invalid level: C1. Valid: A1, A2, B1, B2"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/study/words": {
+      "get": {
+        "tags": ["Study"],
+        "summary": "Get words for study or repeat",
+        "description": "Returns a list of words based on the mode: \n- **topic mode**: Returns all words for a specific level and topic. \n- **repeat mode**: Returns words marked as 'unknown' (inRepeat: true), sorted by the oldest 'lastSeenAt' date.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "mode",
+            "in": "query",
+            "required": true,
+            "description": "Study mode",
+            "schema": {
+              "type": "string",
+              "enum": ["topic", "repeat"],
+              "default": "topic"
+            }
+          },
+          {
+            "name": "level",
+            "in": "query",
+            "required": false,
+            "description": "Required for 'topic' mode, optional for 'repeat'",
+            "schema": {
+              "type": "string",
+              "enum": ["A1", "A2", "B1", "B2"]
+            }
+          },
+          {
+            "name": "topicName",
+            "in": "query",
+            "required": false,
+            "description": "Required for 'topic' mode",
+            "schema": {
+              "type": "string",
+              "example": "general"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success - List of words",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StudyWordsResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Missing parameters for topic mode",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "Parameters 'level' and 'topicName' are required for topic mode"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    },
+    "/study/{wordId}/answer": {
+      "post": {
+        "tags": ["Study"],
+        "summary": "Submit an answer for a word",
+        "description": "Updates study progress for a specific word. \n- If result is **'unknown'**: word is added to the repeat queue (`inRepeat: true`). \n- If result is **'known'** and mode is **'repeat'**: word is removed from the repeat queue (`inRepeat: false`).",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "wordId",
+            "in": "path",
+            "required": true,
+            "description": "The unique ID of the word from StudyWord collection",
+            "schema": {
+              "type": "string",
+              "example": "651a2b3c4d5e6f123456789b"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["result", "mode"],
+                "properties": {
+                  "result": {
+                    "type": "string",
+                    "enum": ["known", "unknown"],
+                    "description": "User's answer result",
+                    "example": "known"
+                  },
+                  "mode": {
+                    "type": "string",
+                    "enum": ["topic", "repeat"],
+                    "description": "Current study mode",
+                    "example": "topic"
+                  }
                 }
               }
             }
           }
         },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
-      }
-    }
-  },
-  "components": {
-    "schemas": {
-      "Registration": {
-        "type": "object",
-        "required": [
-          "name",
-          "email",
-          "password"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "example": "John Robson"
+        "responses": {
+          "200": {
+            "description": "Progress updated successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StudyAnswerResponse" }
+              }
+            }
           },
-          "email": {
-            "type": "string",
-            "example": "emailm@sci.net"
+          "400": {
+            "description": "Bad Request - Validation error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "Result must be one of: known, unknown"
+                }
+              }
+            }
           },
-          "password": {
-            "type": "string",
-            "minLength": 10,
-            "example": 1234567890
-          }
+          "404": {
+            "description": "Not Found - Word ID does not exist",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 404,
+                  "message": "Word not found"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
         }
-      },
-      "RegistrationCurrentResponse": {
-        "type": "object",
-        "properties": {
-          "user": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "example": "John Robson"
-              },
-              "email": {
-                "type": "string",
-                "example": "emailm@sci.net"
-              },
-              "avatar": {
-                "type": "string",
-                "example": "www.gravatar.com/avatar/76ceae3375ff085a80d80e31e960da34"
-              },
-              "subscription": {
-                "type": "string",
-                "enum": [
-                  "starter",
-                  "pro",
-                  "business"
-                ],
-                "example": "starter"
+      }
+    },
+    "/map": {
+      "get": {
+        "tags": ["Map"],
+        "summary": "Get hotspots list (personal or templates)",
+        "description": "Returns a list of map hotspots. \n- **Authorized**: returns user's custom points. \n- **Unauthorized**: returns global templates (isTemplate: true).\nSupports filtering by map type (country).",
+        "security": [{ "bearerAuth": [] }, {}],
+        "parameters": [
+          {
+            "name": "mapType",
+            "in": "query",
+            "description": "Filter hotspots by country map",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["ua", "dk"],
+              "example": "ua"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of hotspots retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HotspotListResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid mapType parameter",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "Invalid map type: ..."
+                }
               }
             }
           }
         }
       },
-      "Login": {
-        "type": "object",
-        "required": [
-          "email",
-          "password"
-        ],
-        "properties": {
-          "email": {
-            "type": "string",
-            "example": "emailm@sci.net"
+      "post": {
+        "tags": ["Map"],
+        "summary": "Create a new hotspot",
+        "description": "Adds a new point to the map. Features:\n- Automatic **weatherQuery** generation (uses 'name' if not provided).\n- Default **imageUrl** from system settings if empty.\n- Prevents duplicate names for the same owner.",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/HotspotCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Hotspot created successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HotspotCreateResponse"
+                }
+              }
+            }
           },
-          "password": {
-            "type": "string",
-            "minLength": 10,
-            "example": 1234567890
-          }
-        }
-      },
-      "Contact": {
-        "type": "object",
-        "required": [
-          "name",
-          "phone"
-        ],
-        "properties": {
-          "_id": {
-            "type": "string",
-            "example": "651db689e2e663b6128bf7b3"
+          "400": {
+            "description": "Validation error (Joi)",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "Validation Error",
+                  "fields": { "position": "Coordinates are required" }
+                }
+              }
+            }
           },
-          "name": {
-            "type": "string",
-            "example": "John Robson"
+          "409": {
+            "description": "Conflict - Name already exists",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 409,
+                  "message": "Registration conflict",
+                  "fields": { "text": "Duplicate name detected" }
+                }
+              }
+            }
           },
-          "phone": {
-            "type": "string",
-            "example": "(666) 555-6666"
-          },
-          "favorite": {
-            "type": "boolean",
-            "example": false
-          },
-          "cover": {
-            "example": null
-          }
-        }
-      },
-      "Contacts": {
-        "type": "array",
-        "items": {
-          "$ref": "#/components/schemas/Contact"
-        }
-      },
-      "NotFound": {
-        "type": "object",
-        "properties": {
-          "message": {
-            "type": "string",
-            "example": "Sorry, contact not found"
-          }
-        }
-      },
-      "BadRequest": {
-        "type": "object",
-        "properties": {
-          "message": {
-            "type": "string",
-            "example": "Validation error's description"
-          }
-        }
-      },
-      "Unauthorized": {
-        "type": "object",
-        "properties": {
-          "message": {
-            "type": "string",
-            "example": "Not authorized"
-          }
-        }
-      },
-      "ServerError": {
-        "type": "object",
-        "properties": {
-          "message": {
-            "type": "string",
-            "example": "Server error"
-          }
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
         }
       }
     },
+    "/map/{hotspotId}": {
+      "get": {
+        "tags": ["Map"],
+        "summary": "Get hotspot by ID",
+        "description": "Returns full details of a specific hotspot. \n- **Authorized**: access to personal hotspots or templates. \n- **Unauthorized**: access only to global templates.",
+        "security": [{ "bearerAuth": [] }, {}],
+        "parameters": [
+          {
+            "name": "hotspotId",
+            "in": "path",
+            "required": true,
+            "description": "Unique ID of the hotspot",
+            "schema": {
+              "type": "string",
+              "example": "651a2b3c4d5e6f1234567891"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hotspot details retrieved successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HotspotResponse" }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid ID format",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "651a2b3c4d5e6f1234567891 is not valid id."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found - Hotspot does not exist or access denied",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 404,
+                  "message": "Hotspot not found"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": ["Map"],
+        "summary": "Update hotspot details",
+        "description": "Updates hotspot fields. \n\n**Special Logic:**\n- If **name** is changed but **weatherQuery** is not provided, weatherQuery will be updated automatically to match the new name.\n- Returns **400 error** if the provided data is identical to the current data in the database.",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "hotspotId",
+            "in": "path",
+            "required": true,
+            "description": "The unique ID of the hotspot to update",
+            "schema": {
+              "type": "string",
+              "example": "651a2b3c4d5e6f1234567891"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/HotspotUpdate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Hotspot updated successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdatedHotspotResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - No changes or validation error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "examples": {
+                  "NoChanges": {
+                    "summary": "Data is identical",
+                    "value": {
+                      "status": "error",
+                      "code": 400,
+                      "message": "No changes detected to save"
+                    }
+                  },
+                  "JoiError": {
+                    "summary": "Validation failed",
+                    "value": {
+                      "status": "Error",
+                      "code": 400,
+                      "message": "Validation Error",
+                      "fields": {
+                        "description": "The Description must be at least 3 characters long"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found - Hotspot doesn't exist or wrong owner",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 404,
+                  "message": "Hotspot cannot be updated because it does not exist"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      },
+      "delete": {
+        "tags": ["Map"],
+        "summary": "Delete a hotspot",
+        "description": "Permanently removes a hotspot from the map. Only the owner of the hotspot can perform this action.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "hotspotId",
+            "in": "path",
+            "required": true,
+            "description": "The unique ID of the hotspot to delete",
+            "schema": {
+              "type": "string",
+              "example": "651a2b3c4d5e6f1234567891"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hotspot deleted successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": { "type": "string", "example": "success" },
+                    "code": { "type": "integer", "example": 200 },
+                    "message": {
+                      "type": "string",
+                      "example": "Delete success"
+                    },
+                    "hotspot": { "$ref": "#/components/schemas/Hotspot" }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found - Hotspot doesn't exist or not owned by user",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorModel" },
+                "example": {
+                  "status": "Error",
+                  "code": 404,
+                  "message": "Hotspot does not exist in this map"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/UnauthorizedError" }
+        }
+      }
+    }
+  },
+
+  "components": {
     "securitySchemes": {
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "example": "John Connor" },
+          "email": { "type": "string", "example": "johnconnor@i.ua" },
+          "avatar": { "type": "string", "example": "https://cloudinary.com..." }
+        }
+      },
+      "UserResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "code": { "type": "integer", "example": 200 },
+          "user": { "$ref": "#/components/schemas/User" }
+        }
+      },
+      "AuthSuccessResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "code": { "type": "integer", "example": 201 },
+          "message": {
+            "type": "string",
+            "example": "Registration successful!"
+          },
+          "user": { "$ref": "#/components/schemas/User" }
+        }
+      },
+      "StatusResponse": {
+        "type": "object",
+        "required": ["status", "code", "message"],
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "code": { "type": "integer", "example": 200 },
+          "message": { "type": "string", "example": "Operation successful" }
+        }
+      },
+      "LoginSuccessResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "code": { "type": "integer", "example": 200 },
+          "token": {
+            "type": "string",
+            "description": "JWT Access Token (valid for 7 days)",
+            "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+          },
+          "user": { "$ref": "#/components/schemas/User" }
+        }
+      },
+
+      "Document": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string", "example": "651a2b3c4d5e6f1234567890" },
+          "country": {
+            "type": "string",
+            "enum": ["ua", "dk"],
+            "example": "ua"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "IDENTITY",
+              "LEGAL",
+              "FAMILY",
+              "HEALTH",
+              "CAR",
+              "FINANCE",
+              "ECOLOGICAL",
+              "SOCIAL",
+              "DIGITAL",
+              "BANKING",
+              "DOCUMENT",
+              "OTHER"
+            ],
+            "example": "IDENTITY"
+          },
+          "text": { "type": "string", "example": "International Passport" },
+          "note": {
+            "type": "string",
+            "example": "Need to renew",
+            "maxLength": 300
+          },
+          "done": { "type": "boolean", "example": false },
+
+          "owner": {
+            "type": "string",
+            "example": "66e9f744cbc456179e373333",
+            "description": "User ID of the document owner. Null for templates."
+          }
+        }
+      },
+      "DocumentsListResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "code": { "type": "integer", "example": 200 },
+          "documents": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Document" }
+          }
+        }
+      },
+      "DocumentCreate": {
+        "type": "object",
+        "required": ["country", "category", "text"],
+        "properties": {
+          "country": {
+            "type": "string",
+            "enum": ["ua", "dk"],
+            "description": "Country selection for the document"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "IDENTITY",
+              "LEGAL",
+              "FAMILY",
+              "HEALTH",
+              "CAR",
+              "FINANCE",
+              "ECOLOGICAL",
+              "SOCIAL",
+              "DIGITAL",
+              "BANKING",
+              "DOCUMENT",
+              "OTHER"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "example": "Name of document",
+            "minLength": 3,
+            "maxLength": 60,
+            "description": "Name or title of the document"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 300,
+            "default": "",
+            "description": "Additional notes about the document"
+          },
+          "done": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "DocumentResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "code": { "type": "integer", "example": 201 },
+          "document": { "$ref": "#/components/schemas/Document" }
+        }
+      },
+      "DocumentUpdate": {
+        "type": "object",
+        "description": "Schema for updating a document. At least one field must be provided.",
+        "properties": {
+          "country": { "type": "string", "enum": ["ua", "dk"] },
+          "category": {
+            "type": "string",
+            "enum": [
+              "IDENTITY",
+              "LEGAL",
+              "FAMILY",
+              "HEALTH",
+              "CAR",
+              "FINANCE",
+              "ECOLOGICAL",
+              "SOCIAL",
+              "DIGITAL",
+              "BANKING",
+              "DOCUMENT",
+              "OTHER"
+            ]
+          },
+          "text": {
+            "type": "string",
+            "example": "Name of document",
+            "minLength": 3,
+            "maxLength": 60
+          },
+          "note": {
+            "type": "string",
+            "example": "Note of document",
+            "maxLength": 300,
+            "allowEmpty": true
+          }
+        }
+      },
+      "GalleryPhoto": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string", "example": "651a2b3c4d5e6f123456789a" },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "example": "https://cloudinary.com"
+          },
+          "description": {
+            "type": "string",
+            "example": "Description photo"
+          },
+          "isTemplate": { "type": "boolean", "example": false },
+          "owner": {
+            "type": "string",
+            "example": "66e9f744cbc456179e373333",
+            "description": "ID of the photo owner"
+          }
+        }
+      },
+      "GalleryListResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "code": { "type": "integer", "example": 200 },
+          "images": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/GalleryPhoto" }
+          },
+          "total": {
+            "type": "integer",
+            "description": "Total number of photos matching the filter",
+            "example": 45
+          }
+        }
+      },
+      "TopicItem": {
+        "type": "object",
+        "properties": {
+          "topic": { "type": "string", "example": "daily" },
+          "totalWords": { "type": "integer", "example": 11 }
+        }
+      },
+      "StudyTopicsResponse": {
+        "type": "object",
+        "properties": {
+          "availableTopics": {
+            "type": "object",
+            "properties": {
+              "repeat": {
+                "type": "object",
+                "properties": {
+                  "wordsInRepeat": { "type": "integer", "example": 17 }
+                }
+              },
+              "learnedWords": { "type": "integer", "example": 8 },
+              "topics": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/TopicItem" }
+              }
+            }
+          }
+        }
+      },
+      "StudyWord": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string", "example": "651a2b3c4d5e6f123456789b" },
+          "en": { "type": "string", "example": "Apple" },
+          "da": { "type": "string", "example": "Æble" },
+          "uk": { "type": "string", "example": "Яблуко" },
+          "topic": { "type": "string", "example": "food" },
+          "level": { "type": "string", "example": "A1" }
+        }
+      },
+      "StudyWordsResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "words": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/StudyWord" }
+          }
+        }
+      },
+      "StudyProgress": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string", "example": "651a2b3c4d5e6f123456789c" },
+          "owner": { "type": "string", "example": "651a2b3c4d5e6f1234567890" },
+          "wordId": { "type": "string", "example": "651a2b3c4d5e6f123456789b" },
+          "lastResult": {
+            "type": "string",
+            "enum": ["known", "unknown", null],
+            "example": "known"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-04-24T15:30:00Z"
+          },
+          "inRepeat": { "type": "boolean", "example": false }
+        }
+      },
+      "StudyAnswerResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "code": { "type": "integer", "example": 200 },
+          "progress": { "$ref": "#/components/schemas/StudyProgress" }
+        }
+      },
+      "Hotspot": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string", "example": "651a2b3c4d5e6f1234567891" },
+          "mapType": {
+            "type": "string",
+            "enum": ["ua", "dk"],
+            "example": "dk"
+          },
+          "name": { "type": "string", "example": "Copenhagen" },
+          "category": {
+            "type": "string",
+            "enum": [
+              "city",
+              "camp",
+              "border",
+              "bridge",
+              "attraction",
+              "hotel",
+              "other"
+            ],
+            "example": "city"
+          },
+          "position": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "example": 68
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "example": 63
+              }
+            }
+          },
+          "imageUrl": {
+            "type": "string",
+            "example": "https://cloudinary.com..."
+          },
+          "description": {
+            "type": "string",
+            "example": "Сenter of the country"
+          },
+          "weatherQuery": { "type": "string", "example": "Copenhagen" },
+          "isTemplate": { "type": "boolean", "example": false },
+          "owner": {
+            "type": "string",
+            "nullable": true,
+            "example": "651a2b3c4d5e6f1234567890"
+          }
+        }
+      },
+      "HotspotListResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "code": { "type": "integer", "example": 200 },
+          "hotspots": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Hotspot" }
+          }
+        }
+      },
+      "HotspotResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "code": { "type": "integer", "example": 200 },
+          "hotspot": { "$ref": "#/components/schemas/Hotspot" }
+        }
+      },
+      "HotspotCreate": {
+        "type": "object",
+        "required": ["mapType", "name", "category", "position", "description"],
+        "properties": {
+          "mapType": {
+            "type": "string",
+            "enum": ["ua", "dk"],
+            "example": "dk"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 80,
+            "example": "Name of hotspot"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "city",
+              "camp",
+              "border",
+              "bridge",
+              "attraction",
+              "hotel",
+              "other"
+            ]
+          },
+          "position": {
+            "type": "object",
+            "required": ["x", "y"],
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "example": 75
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "example": 30
+              }
+            }
+          },
+          "imageUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional custom icon URL",
+            "example": "https://cloudinary.com..."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 5000,
+            "example": "Your description ..."
+          },
+          "weatherQuery": {
+            "type": "string",
+            "description": "City name for weather data. Defaults to 'name' if empty.",
+            "example": "Name of hotspot"
+          }
+        }
+      },
+      "CreatedHotspot": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string", "example": "651a2b3c4d5e6f1234567891" },
+          "mapType": {
+            "type": "string",
+            "enum": ["ua", "dk"],
+            "example": "dk"
+          },
+          "name": { "type": "string", "example": "Name of hotspot" },
+          "category": {
+            "type": "string",
+            "enum": [
+              "city",
+              "camp",
+              "border",
+              "bridge",
+              "attraction",
+              "hotel",
+              "other"
+            ],
+            "example": "city"
+          },
+          "position": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "example": 75
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "example": 30
+              }
+            }
+          },
+          "imageUrl": {
+            "type": "string",
+            "example": "https://cloudinary.com..."
+          },
+          "description": {
+            "type": "string",
+            "example": "Your description ..."
+          },
+          "weatherQuery": { "type": "string", "example": "Name of hotspot" },
+          "isTemplate": { "type": "boolean", "example": false },
+          "owner": {
+            "type": "string",
+            "nullable": true,
+            "example": "651a2b3c4d5e6f1234567890"
+          }
+        }
+      },
+      "HotspotCreateResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "code": { "type": "integer", "example": 200 },
+          "hotspot": { "$ref": "#/components/schemas/CreatedHotspot" }
+        }
+      },
+      "HotspotUpdate": {
+        "type": "object",
+        "description": "At least one field must be provided for the update.",
+        "properties": {
+          "mapType": {
+            "type": "string",
+            "enum": ["ua", "dk"],
+            "example": "dk"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 80,
+            "example": "Updated Point Name"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "city",
+              "camp",
+              "border",
+              "bridge",
+              "attraction",
+              "hotel",
+              "other"
+            ]
+          },
+          "position": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "example": 50
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "example": 30
+              }
+            }
+          },
+          "imageUrl": {
+            "type": "string",
+            "format": "uri",
+            "example": "https://cloudinary.com..."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 5000,
+            "example": "Updated description ..."
+          },
+          "weatherQuery": {
+            "type": "string",
+            "description": "If not provided, will be synced with 'name'",
+            "example": "Updated Point Name"
+          }
+        }
+      },
+      "UpdatedHotspot": {
+        "type": "object",
+        "properties": {
+          "_id": { "type": "string", "example": "651a2b3c4d5e6f1234567891" },
+          "mapType": {
+            "type": "string",
+            "enum": ["ua", "dk"],
+            "example": "dk"
+          },
+          "name": { "type": "string", "example": "Updated Point Name" },
+          "category": {
+            "type": "string",
+            "enum": [
+              "city",
+              "camp",
+              "border",
+              "bridge",
+              "attraction",
+              "hotel",
+              "other"
+            ],
+            "example": "city"
+          },
+          "position": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "example": 50
+              },
+              "y": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "example": 30
+              }
+            }
+          },
+          "imageUrl": {
+            "type": "string",
+            "example": "https://cloudinary.com..."
+          },
+          "description": {
+            "type": "string",
+            "example": "Updated description ..."
+          },
+          "weatherQuery": { "type": "string", "example": "Updated Point Name" },
+          "isTemplate": { "type": "boolean", "example": false },
+          "owner": {
+            "type": "string",
+            "nullable": true,
+            "example": "651a2b3c4d5e6f1234567890"
+          }
+        }
+      },
+      "UpdatedHotspotResponse": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "example": "success" },
+          "code": { "type": "integer", "example": 200 },
+          "hotspot": { "$ref": "#/components/schemas/UpdatedHotspot" }
+        }
+      },
+
+      "ErrorModel": {
+        "type": "object",
+        "required": ["status", "code", "message"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "Error"
+          },
+          "code": {
+            "type": "integer",
+            "description": "HTTP status code",
+            "example": 400
+          },
+          "message": {
+            "type": "string",
+            "example": "Validation error"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Specific field errors (e.g., { 'email': 'Invalid format' }). Can be null if not a validation error.",
+            "example": { "email": "Enter a valid email address" }
+          }
+        }
+      }
+    },
+    "responses": {
+      "ValidationError": {
+        "description": "Validation failed (Joi, Mongoose or Multer)",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorModel" },
+            "examples": {
+              "JoiError": {
+                "summary": "Joi validation example",
+                "value": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "Validation error",
+                  "fields": {
+                    "password": "Password must be at least 6 characters"
+                  }
+                }
+              },
+              "MulterError": {
+                "summary": "File size error",
+                "value": {
+                  "status": "Error",
+                  "code": 400,
+                  "message": "Validation error",
+                  "fields": { "avatar": "File too large (max 5MB)" }
+                }
+              }
+            }
+          }
+        }
+      },
+
+      "UnauthorizedError": {
+        "description": "Unauthorized access",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorModel" },
+            "examples": {
+              "NoHeader": {
+                "summary": "Missing header",
+                "value": {
+                  "status": "Error",
+                  "code": 401,
+                  "message": "Authorization header not found"
+                }
+              },
+              "ExpiredToken": {
+                "summary": "Token expired",
+                "value": {
+                  "status": "Error",
+                  "code": 401,
+                  "message": "Not authorized: jwt expired"
+                }
+              }
+            }
+          }
+        }
+      },
+
+      "ConflictError": {
+        "description": "Conflict (e.g. Email already in use)",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorModel" },
+            "example": {
+              "status": "Error",
+              "code": 409,
+              "message": "Registration conflict",
+              "fields": { "email": "This email is unavailable" }
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "Internal Server Error",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorModel" },
+            "example": {
+              "status": "Error",
+              "code": 500,
+              "message": "Registration failed. Please try again later.",
+              "fields": null
+            }
+          }
+        }
       }
     }
   }
